@@ -15,6 +15,10 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
 import csv
 from fuzzywuzzy import fuzz
+import plotly.plotly as py
+
+
+
 
 def Feature_set1():
 
@@ -42,7 +46,7 @@ def Feature_set1():
     corpus_raw['charcount_q2'] = corpus_raw.apply(lambda row: sum([len(char) for char in row['question2_tokens']]),axis=1)
     corpus_raw['diff_two_lengths'] = corpus_raw.apply(lambda row: abs(row['text_length_q1'] - row['text_length_q2']),axis=1)
 
-    feature_set1 = ['question1_tokens', 'question2_tokens', 'common', 'totalwords', 'proportion_common_words',
+    feature_set1 = ['id','question1_tokens', 'question2_tokens', 'common', 'totalwords', 'proportion_common_words',
                     'text_length_q1', 'text_length_q2', 'charcount_q1', 'charcount_q2', 'diff_two_lengths','is_duplicate']
 
     corpus_raw.to_csv("Feature_set1.csv",columns=feature_set1)
@@ -69,10 +73,9 @@ def Exploratory_Data_Analysis():
 
     # x-axis----> commonwords(%)
     # y-axis-----> questions(questiondIDs)
+
     corpus_raw=pd.read_csv("Feature_set1.csv")
-    proportion_common_words_is_duplicate = corpus_raw[['proportion_common_words', 'is_duplicate']].groupby(['proportion_common_words'], as_index=False).mean().sort_values(
-        by='is_duplicate',
-        ascending=False)
+    proportion_common_words_is_duplicate = corpus_raw[['proportion_common_words', 'is_duplicate']].groupby(['proportion_common_words'], as_index=False).mean().sort_values(by='is_duplicate', ascending=False)
 
     #print proportion_common_words_is_duplicate
 
@@ -102,10 +105,7 @@ def Exploratory_Data_Analysis():
     corpus_raw1=pd.read_csv("Feature_set1.csv")
     corpus_raw=pd.read_csv("Feature_set2.csv")
 
-    QRatio_is_duplicate = corpus_raw[['fuzz_qratio', 'is_duplicate']].groupby(
-        ['fuzz_qratio'], as_index=False).mean().sort_values(
-        by='is_duplicate',
-        ascending=False)
+    #QRatio_is_duplicate = corpus_raw[['fuzz_qratio', 'is_duplicate']].groupby(['fuzz_qratio'], as_index=False).mean().sort_values( by='is_duplicate',ascending=False)
 
     #x_axis = corpus_raw1.loc[corpus_raw1['is_duplicate'] == 0, 'proportion_common_words']
     #y_axis = corpus_raw.loc[corpus_raw['is_duplicate'] == 0, 'fuzz_partialratio']
@@ -124,52 +124,15 @@ def Exploratory_Data_Analysis():
 
     plt.show()
 
+    plt.hist(x_axis1)
+    plt.title("Partial Ratio of duplicate questions")
+    plt.xlabel("Partial Ratio")
+    plt.ylabel("Frequency")
+    plt.show()
 
-# def words_to_vectors():[
-#     #Once we have vectors
-#     #distance, simalrity, Ranking
-#
-#
-#     num_features=300  #Dimensionality of vectors
-#     num_workers = multiprocessing.cpu_count()  #num of threads running in parallel so that it would run faster
-#     context_size=7           #window size to look number of words in context of the given word
-#     downsampling=1e-3 #Any number between 0 and 1e-5 is good for this (doesnot look repeatedly at the same words)
-#     seed=1      #random number generator what part of the text we want to look and vectorize it
-#     min_word_count=3    #smallest set of words we want to recognize when converting into vector
-#
-#     thrones2vec = gensim.models.Word2Vec(
-#     sg=1,
-#     seed=1,
-#     workers=num_workers,
-#     size=num_features,
-#     window=context_size,
-#     min_count=min_word_count,
-#     sample=downsampling
-#  )
-#
-#     #thrones2vec.build_vocab(wordlist)
-#     #thrones2vec.train(wordlist)
-#     #if not os.path.exists("trained"):
-#         #os.makedirs("trained")
-#     #thrones2vec.save(os.path.join("trained","thrones2vec.w2v"))
-#
-# def Visualization():
-#
-#     thrones2vec=gensim.models.KeyedVectors.load_word2vec_format(os.path.join("trained",'GoogleNews-vectors-negative300.bin'), binary=True)
-#     all_word_vectors_matrix = thrones2vec.wv.syn0   #300 features
-#     print (all_word_vectors_matrix.shape)
-#
-#     #clf=PCA(n_components=2)                                                #PCA is performed to visualize only
-#     #all_word_vectors_matrix_2D=clf.fit_transform(all_word_vectors_matrix)
-#
-#
-#
-# 
-#     #clf = sklearn.manifold.TSNE(n_components=2,random_state=0)
-#     #all_word_vectors_matrix_2D=clf.fit_transform(all_word_vectors_matrix)
-#
-#     #Average all the vectors in a sentence
-#
+
+
+
 
 
 
@@ -178,7 +141,6 @@ def Main():
     Feature_set1()
     Feature_set2()
     Exploratory_Data_Analysis()
-    #words_to_vectors()
-
+    
     
 Main()
