@@ -7,7 +7,21 @@ step 1:
 
 Basic Feature Engineering and Initial Exploratory Analysis reveals us that similariy of question pairs cannot merely be judged on cosmetic level as there are no absolute patterns or corelations of features which we extracted are found with duplicaity of questions so we will dig one layer deeper to analyze the semantics of the sentence and then analyze their duplacity
 
-https://github.com/Mustufain/Quora--Detecting-Duplicate-Questions/blob/master/Feature_set1_2D.png
+
+Feature set 1 mapped to 2 dimension
+
+Red: Questions that are not duplicate
+Blue : Questions that are duplicate
+[![Feature_set1_2D.png](https://s24.postimg.org/lyu04vf2d/Feature_set1_2_D.png)](https://postimg.org/image/72vgxa3nl/)
+
+Feature set 2 mapped to 2 dimension
+
+Red : Questions that are not duplicate
+Blue: Questions that are duplicate
+
+[![Feature_set2_2D.png](https://s2.postimg.org/4vmexwbm1/Feature_set2_2_D.png)](https://postimg.org/image/rx303nb9h/)
+
+
 
 
 
