@@ -17,7 +17,7 @@ from scipy import stats
 
 def Data_Cleaning(train_file):
 
-    corpus_raw = pd.read_csv(train_file)
+    corpus_raw = pd.read_csv(train_file,nrows=5)
     corpus_raw = corpus_raw.dropna()
     corpus_raw['question1'] = corpus_raw['question1'].mask(corpus_raw['question1'] == 0).dropna()
     corpus_raw['question2'] = corpus_raw['question2'].mask(corpus_raw['question2'] == 0).dropna()
@@ -34,14 +34,15 @@ def Data_Cleaning(train_file):
     #Remove stopwords
 
     corpus_raw['question1_tokens'] = corpus_raw['question1'].apply(
-    lambda row: [row for row in row.split() if row not in stop])
-
+    lambda row: [row for row in row.split()])
     corpus_raw['question2_tokens'] = corpus_raw['question2'].apply(
-    lambda row: [row for row in row.split() if row not in stop])
+
+    lambda row: [row for row in row.split()])
 
     corpus_raw['question1_tokens'] = corpus_raw['question1_tokens'].apply(lambda row: ",".join(row))
     corpus_raw['question2_tokens'] = corpus_raw['question2_tokens'].apply(lambda row: ",".join(row))
 
+    print corpus_raw.isnull().sum()
     return corpus_raw
 
 def words_to_vectors(fs1):
@@ -105,11 +106,12 @@ def words_to_vectors(fs1):
     fs1['braycurtis']=''
 
     #Feature list
-    Features=['id','question1','question2','question1_tokens','question2_tokens','q1textlength','q2textlength',
-              'q1word_in_vocab_length','q2word_in_vocab_length','q1word_not_in_vocab_length','q2word_not_in_vocab_length',
-              'q1_words_in_vocab','q2_words_in_vocab','q1_words_not_in_vocab','q2_words_not_in_vocab','euclidean',
-              'manhattan','kurtosisq1','kurtosisq2','skewq1','skewq2','canberra','braycurtis','minkowski',
+    Features=['id','euclidean','manhattan','kurtosisq1','kurtosisq2','skewq1','skewq2','canberra','braycurtis','minkowski',
               'wordmover','normwordmover','jaccard','cossimilarity']
+
+    Missing_Features=['id','question1','question2','question1_tokens','question2_tokens','q1textlength','q2textlength',
+              'q1word_in_vocab_length','q2word_in_vocab_length','q1word_not_in_vocab_length','q2word_not_in_vocab_length',
+              'q1_words_in_vocab','q2_words_in_vocab','q1_words_not_in_vocab','q2_words_not_in_vocab','is_duplicate']
 
     for index,row in fs1.iterrows():
         #filter(function, iterable) is equivalent to[item for item in iterable if function(item)]
@@ -144,8 +146,8 @@ def words_to_vectors(fs1):
         Distance_Functions(Quora_word2vec, fs1, index, q1_vector, q2_vector, row['question1_tokens'],row['question2_tokens'])
 
     #Write into file here
-    fs1['normwordmover']=Normalized_Word_Mover_Distance(fs1,Quora_word2vec)
-    Write_to_csv(fs1,Features)
+    Normalized_Word_Mover_Distance(fs1,Quora_word2vec)
+    Write_to_csv(fs1,Features,Missing_Features)
 
 
 
@@ -276,16 +278,25 @@ def Distance_Functions(model,fs1,index,q1_vector,q2_vector,q1,q2):
 
 
 
-def Write_to_csv(fs1,Features):
+def Write_to_csv(fs1,Features,Missing_Features):
 
     for i in range(0,300):
 
         Features.append('q1_vector_'+str(i))
+
+    for i in range(0,300):
+
         Features.append('q2_vector_'+str(i))
 
     Features.append('is_duplicate')
 
-    fs1.to_csv("Features_Word2Vec.csv",columns=Features)
+    #Word 2 vec features
+
+    fs1.to_csv("Feature_set3.csv",columns=Features)
+
+    #Missing words in word2vec-----> for analysis
+
+    fs1.to_csv("missing_words_word2vec.csv",columns=Missing_Features)
 
 
 
@@ -425,16 +436,19 @@ def Normalized_Word_Mover_Distance(fs1,model):
     temp = np.zeros(shape=fs1['question1_tokens'].shape[0])
 
     for index,row in fs1.iterrows():
-        if index<10:
-            temp=model.wmdistance(fs1.loc[index,'question1_tokens'],fs1.loc[index,'question2_tokens'])
 
-    return temp
+            temp=model.wmdistance(fs1.loc[index,'question1_tokens'],fs1.loc[index,'question2_tokens'])
+            fs1.set_value(index,'normwordmover',temp)
+
+
 
 
 def Main():
-
+    import time
+    start_time = time.time()
     file='train.csv'
     corpus_raw=Data_Cleaning(file)
     words_to_vectors(corpus_raw)
+    print("--- %s seconds ---" % (time.time() - start_time))
 
 Main()
