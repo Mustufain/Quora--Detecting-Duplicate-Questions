@@ -1,24 +1,14 @@
 import numpy as np
-import glob
-import multiprocessing  #Multi threading
-import os
-import re
 import nltk
 from sklearn.decomposition import PCA
-import sklearn.manifold
-import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import pandas as pd
-import seaborn as sns
-import gensim
 from nltk.corpus import stopwords
-from sklearn.feature_extraction.text import TfidfVectorizer
-import csv
 from fuzzywuzzy import fuzz
-import plotly.plotly as py
 import string
 import numpy as np
 from sklearn.preprocessing import scale
+import logging
 
 def Data_Cleaning(train_file):
 
@@ -35,6 +25,17 @@ def Data_Cleaning(train_file):
     corpus_raw['question1'] = corpus_raw['question1'].apply(lambda row: row.translate(None, string.punctuation))
     corpus_raw['question2'] = corpus_raw['question2'].apply(lambda row: row.translate(None, string.punctuation))
 
+    stop = stopwords.words('english')
+
+    # Remove stopwords
+
+    corpus_raw['question1_tokens'] = corpus_raw['question1'].apply(
+        lambda row: [row for row in row.split()])
+
+    corpus_raw['question2_tokens'] = corpus_raw['question2'].apply(
+        lambda row: [row for row in row.split()])
+
+
     return corpus_raw
 
 def Feature_set1(corpus_raw):
@@ -42,12 +43,10 @@ def Feature_set1(corpus_raw):
 
     #tokenize (not removing stop words)
 
-    corpus_raw['question1_tokens'] = corpus_raw['question1'].apply(lambda row:  row.split())
-    corpus_raw['question2_tokens'] = corpus_raw['question2'].apply(lambda row:  row.split())
-
 
 
     # Basic feature Engineering
+
 
     corpus_raw['common'] = corpus_raw.apply(
         lambda row: len(list(set(row['question1_tokens']).intersection(row['question2_tokens']))), axis=1)
@@ -62,7 +61,7 @@ def Feature_set1(corpus_raw):
     corpus_raw['charcount_q2'] = corpus_raw.apply(lambda row: sum([len(char) for char in row['question2_tokens']]),axis=1)
     corpus_raw['diff_two_lengths'] = corpus_raw.apply(lambda row: abs(row['text_length_q1'] - row['text_length_q2']),axis=1)
 
-    feature_set1 = ['id','question1', 'question2', 'common', 'totalwords', 'proportion_common_words',
+    feature_set1 = ['id', 'common', 'totalwords', 'proportion_common_words',
                     'text_length_q1', 'text_length_q2', 'charcount_q1', 'charcount_q2', 'diff_two_lengths','is_duplicate']
 
     corpus_raw.to_csv("Feature_set1.csv",columns=feature_set1)
@@ -79,7 +78,7 @@ def Feature_set2(corpus_raw):
     corpus_raw['fuzz_token_sortratio'] = corpus_raw.apply(lambda row: fuzz.token_sort_ratio(str(row['question1']), str(row['question2'])),axis=1)
     corpus_raw['fuzz_wratio'] = corpus_raw.apply(lambda row: fuzz.WRatio(str(row['question1']), str(row['question2'])), axis=1)
 
-    Feature_set2=['id','question1','question2','fuzz_qratio','fuzz_partialratio','fuzz_partial_token_setratio','fuzz_partial_token_sortratio','fuzz_token_sortratio','fuzz_token_setratio','fuzz_wratio','is_duplicate']
+    Feature_set2=['id','fuzz_qratio','fuzz_partialratio','fuzz_partial_token_setratio','fuzz_partial_token_sortratio','fuzz_token_sortratio','fuzz_token_setratio','fuzz_wratio','is_duplicate']
     corpus_raw.to_csv('Feature_set2.csv',columns=Feature_set2)
 
 def Exploratory_Data_Analysis():
@@ -176,17 +175,13 @@ def Exploratory_Data_Analysis():
     plt.show()
 
 
-
-
-
-
 def Main():
 
     file='train.csv'
     corpus_raw=Data_Cleaning(file)
     Feature_set1(corpus_raw)
     Feature_set2(corpus_raw)
-    Exploratory_Data_Analysis()
+   # Exploratory_Data_Analysis()
 
     
 Main()
