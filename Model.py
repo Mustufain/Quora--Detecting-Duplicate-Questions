@@ -8,112 +8,56 @@ from sklearn.linear_model import LogisticRegression
 from sklearn import cross_validation
 from sklearn.metrics import accuracy_score
 import xgboost as xg
+from sklearn.model_selection import KFold
+from sklearn.metrics import log_loss
+from sklearn.manifold import t_sne
 
-def read_file(file):
+def Xgb_Boost_Model():
 
-    # filter(function, iterable) is equivalent to[item for item in iterable if function(item)]
-
-
-    # dataframe=pd.read_csv(file)
-    #
-    # cols = list(dataframe)
-    # col=[]
-    # exclude=['Unnamed: 0',"Unnamed: 0.1",'id','is_duplicate']
-    # col=filter(lambda index: index not  in exclude,cols )
-    #
-    # data = np.array(dataframe.values)
-    # target = np.array(data[:, 11])
-    #
-    # All_Features = np.array(dataframe[col].copy())  #All set of features
-    #
-    #
-    # w2v_Features = All_Features[:, 15:All_Features.shape[1]] #only wordvector features
-    #
-    # vec_Features = All_Features[:,28:All_Features.shape[1]] #only word vectors
-    #
-    # # stratified sample
-    #
-    # X_train, X_test, y_train, y_test = cross_validation.train_test_split(
-    # All_Features, target, test_size=0.1,stratify=target, random_state = 0)
-    #
-    # y_test=y_test.reshape(y_test.shape[0],1)
-    # stratified_data = np.concatenate((X_test,y_test),axis=1)
-    # np.savetxt('stratifiedsample.csv',stratified_data)
-    # exit(0)
-    data = np.loadtxt('stratifiedsample.csv')
-    All_Features=data[:,0:628]
+    dataframe=pd.read_csv('Quora_Engineered_Features.csv')
+    dataframe.replace(np.nan,-5555555)
+    dataframe.replace(np.inf,-5555555)
+    data = np.array(dataframe)
     target=data[:,-1]
-    X_train, X_test, y_train, y_test = cross_validation.train_test_split(
-    All_Features, target, test_size=0.1,random_state = 0)
-    return X_train,X_test,y_train,y_test
-
-def Logistic_Regression_Model(X_train,X_test,y_train,y_test):
-
-    #I am using stratified sample as the data is huge and takes alot of time to train
-    clf=LogisticRegression()
-    clf.c=1.0
-    clf.penalty='l1'
-    clf.fit(X_train,y_train)
-    y_pred=clf.predict(X_test)
-    print "Accuracy: " + str(accuracy_score(y_test,y_pred)*100)
-
-    #---Accuracy 74.5%------# -- > This accuracy is on complete training set
-    #Hyper parameters can be tuned to get much better accuracy
+    Features=data[:,2:628]
 
 
+    xg_boost=xg.XGBClassifier(learning_rate =0.1,
+             n_estimators=251,
+             max_depth=10,
+             min_child_weight=1,
+             gamma=0.5,
+             subsample=0.8,
+             colsample_bytree=0.8,
+             objective= 'binary:logistic',
+             nthread=-1,
+             scale_pos_weight=1,
+             seed=27)
 
-def Xgb_Boost_Model(data,target): #Needs to be implemented
+    AUC=[]
+    # log=[]
+    kf = KFold(n_splits=5)    #----------> 5 fold cross validation
+    for train_index, test_index in kf.split(Features):
 
-    return "b"
+        X_train, X_test = Features[train_index], Features[test_index]
+        y_train, y_test = target[train_index], target[test_index]
+        xg_boost.fit(X_train, y_train)
+        y_pred = xg_boost.predict(X_test)
+        AUC.append(accuracy_score(y_test, y_pred))
 
-def Visualization(data):
+    print "Accuracy", np.mean(AUC)*100
 
-
-    # All features mapped to 2D
-
-    dataframe = pd.read_csv(data,nrows=100000)
-    clf = PCA(n_components=2)
-    cols = list(dataframe)
-    col = []
-    exclude = ['Unnamed: 0', "Unnamed: 0.1", 'id', 'is_duplicate']
-    col = filter(lambda index: index not in exclude, cols)
-
-    data = np.array(dataframe.values)
-    target = np.array(data[:, 11])
-
-    Features = np.array(dataframe[col].copy())
-
-    Vector_Features = Features[:,15:len(Features)]
-
-
-    Transformed_2D = clf.fit(Vector_Features, target).transform(Vector_Features)
-    dataframe['colors'] = dataframe.apply(lambda row: 'red' if row['is_duplicate'] == 0 else 'blue', axis=1)
-
-    plt.scatter(Transformed_2D[:, 0], Transformed_2D[:, 1], color=dataframe['colors'])
-
-    plt.legend(loc='lower left', ncol=3, fontsize=7)
-    plt.title("All features projected on 2 dimension")
-    plt.show()
+    #Cross-Validated-Accuracy 0.753708971283(5-fold cross validation) estimators=100
 
 
-
-
-
-
-
-
+   
 
 def Main():
 
     import time
+    print("Programe started....")
     start_time = time.time()
-    file='Feature_all.csv'
-    X_train,X_test,y_train,y_test=read_file(file)
-    Logistic_Regression_Model(X_train,X_test,y_train,y_test)
-    #Xgb_Boost_Model()
-    #Visualization(file)
-
-
+    Xgb_Boost_Model()
     print("--- %s seconds ---" % (time.time() - start_time))
 
 Main()
