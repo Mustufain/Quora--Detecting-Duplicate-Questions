@@ -1,23 +1,17 @@
 from pyspark import SparkContext
 from pyspark import SQLContext
 import logging
-import os
 from pyspark.sql import functions as F
 from pyspark.ml.feature import Word2Vec,Tokenizer,Normalizer,VectorAssembler,StopWordsRemover
 from functools import reduce
 from pyspark.sql.types import StringType,IntegerType,FloatType
-import pyarrow
 import sys
-import nltk
 from fuzzywuzzy import fuzz
-import multiprocessing
-import gensim
 from scipy import spatial
 from scipy import stats
 from pyspark import Row
 from pyspark.mllib.linalg import Vectors
 import time
-from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder,TrainValidationSplit
 from pyspark.ml.classification import RandomForestClassifier
@@ -26,29 +20,64 @@ from scipy import spatial
 from scipy import stats
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 import math
+from pyspark.mllib.evaluation import BinaryClassificationMetrics
+from pyspark.ml import Pipeline, PipelineModel
+import numpy as np
 
-logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 t0 = time.time()
 reload(sys)
 sys.setdefaultencoding('utf-8')
 sc=SparkContext('local','untitled1')
-sc.setLogLevel("WARN")
+
+
+sc.setLogLevel("ERROR")
+log4jLogger = sc._jvm.org.apache.log4j
+LOGGER = log4jLogger.LogManager.getLogger(__name__)
+
+
+# create a file handler
+handler = logging.FileHandler('error.log')
+handler.setLevel(logging.ERROR)
+
+#
+# # create a logging format
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# handler.setFormatter(formatter)
+#
+#
+# # add the handlers to the logger
+#LOGGER.addHandler(handler)
+
+
 
 sqlContext = SQLContext(sc)
-sc.setLogLevel("ERROR")
 
-train = sqlContext.read.format("com.databricks.spark.csv").\
+
+data = sqlContext.read.format("com.databricks.spark.csv").\
         option("header", "true").\
         option("inferschema", "true").\
         option("mode", "DROPMALFORMED").\
         option("encoding", "UTF-8") .\
-        load("data/train.csv").limit(10000)
+        load("data/train.csv")
 
 
 
-train = train.withColumnRenamed("is_duplicate", "label")
-train = train.withColumn("label", train.label.cast(IntegerType()))
-train=train.fillna(" ")
+data = data.withColumnRenamed("is_duplicate", "label")
+data = data.withColumn("label", data.label.cast(IntegerType()))
+data=data.fillna(" ")
+
+##  subset origional data to run some tests
+rnd_seed = 42
+fractions = {0.0: 0.025, 1.0: 0.025}
+subset = data.stat.sampleBy('label', fractions, seed=rnd_seed)
+data.groupBy('label').count().show()
+subset.groupBy('label').count().show()
+########
+
+#train, test = data.randomSplit([0.9, 0.1], seed=12345) # splitting for validation
+train, test = subset.randomSplit([0.9, 0.1], seed=12345) # splitting for validation
+
+
 
 ######################################################################################
 
@@ -353,10 +382,10 @@ remover_q1=StopWordsRemover(inputCol='question1_tokens',outputCol='question1_tok
 remover_q2=StopWordsRemover(inputCol='question2_tokens',outputCol='question2_tokens_filtered')
 
 
-q1w2model = Word2Vec(inputCol='question1_tokens_filtered',outputCol='q1_vectors')
+q1w2model = Word2Vec(inputCol='question1_tokens_filtered',outputCol='q1_vectors',vectorSize=300)
 q1w2model.setSeed(1)
 
-q2w2model = Word2Vec(inputCol='question2_tokens_filtered',outputCol='q2_vectors')
+q2w2model = Word2Vec(inputCol='question2_tokens_filtered',outputCol='q2_vectors',vectorSize=300)
 q2w2model.setSeed(1)
 
 
@@ -366,12 +395,15 @@ assembler = VectorAssembler(inputCols=["commonwords","totalwords","textlengthq1"
                                        'q1_vectors','q2_vectors','manhattan','euclidean','minkowski','canberra','braycurtis','jaccard',
                                        'cosine','kurtosis_q1','kurtosis_q2','skew_q1','skew_q2'],outputCol="features")
 
-lr = LogisticRegression(labelCol='label',featuresCol='features')
+lr = LogisticRegression(labelCol='label',featuresCol='features', weightCol='class_weight',family='binomial')
 ######################################### HYPER PARAMETERS #########################
 
 windowSize = range(5,10)
 minCount = range(5,20)
-vectorSize=range(100,300,100)
+maxIter= [10,100,1000]
+regParam= [0.1,0.01]
+
+# Total 24 Models
 
 ######################################################################################
 
@@ -386,48 +418,76 @@ pipeline=Pipeline(stages=[token_q1,token_q2,remover_q1,remover_q2,
                           transformer_cosine,transformer_euclidean,
                           transformer_jaccard,transformer_minkowski,transformer_kurtosis_q1,
                           transformer_kurtosis_q2,transformer_skew_q1,transformer_skew_q2,
-                          assembler,lr])
+                          assembler])
 
-pipeline.fit(train)
-
-# train=model.transform(train)
-#
-# train=train.drop('question1_tokens')
-# train=train.drop('question2_tokens')
-# train=train.drop('question1_tokens_filtered')
-# train=train.drop('question2_tokens_filtered')
-# train=train.drop('q1_vectors')
-# train=train.drop('q2_vectors')
-# train.select([F.count(F.when(F.isnan(c) | F.isnull(c), c)).alias(c) for c in train.columns]).show()
-
+# paramGrid only takes list of values not integers
 
 paramGrid = ParamGridBuilder() \
-    .addGrid(q1w2model.setWindowSize,windowSize) \
-    .addGrid(q1w2model.setMinCount,minCount) \
-    .addGrid(q2w2model.setWindowSize,windowSize) \
-    .addGrid(q2w2model.setMinCount,minCount) \
-     .addGrid(q1w2model.setVectorSize,vectorSize) \
-    .addGrid(q2w2model.setVectorSize,vectorSize) \
-    .addGrid(lr.maxIter, [10, 100, 1000]) \
-    .addGrid(lr.regParam, [0.1, 0.01]) \
+    .addGrid(lr.regParam,regParam) \
     .build()
+    # .addGrid(q1w2model.windowSize,windowSize) \
+    # .addGrid(q1w2model.minCount,minCount) \
+    # .addGrid(q2w2model.windowSize,windowSize) \
+    # .addGrid(q2w2model.minCount,minCount) \
+    # .addGrid(lr.maxIter,maxIter) \
+    # .addGrid(lr.regParam, regParam) \
+    #
 
-
-# crossval = CrossValidator(estimator=pipeline,
-#                           estimatorParamMaps=paramGrid,
-#                           evaluator=BinaryClassificationEvaluator(),
-#                           numFolds=5)
+evaluator = BinaryClassificationEvaluator(rawPredictionCol='rawPrediction', labelCol='label', metricName='areaUnderROC')
 
 
 tvs = TrainValidationSplit(estimator=pipeline,
                           estimatorParamMaps=paramGrid,
-                          evaluator=BinaryClassificationEvaluator(),
+                          evaluator=evaluator,
                           trainRatio=0.8)
 
+# Add class weight to class weights (imbalanced data set)
+
+label1count = train.filter(F.col('label') == '1').count() #duplicate
+datacount=train.count()
+weight_balance = np.round(float(datacount-label1count)/float(datacount),decimals=2)
+
+train = (train
+         .withColumn('class_weight',
+        F.when(F.col('label') == '1', F.lit(weight_balance)).otherwise(F.lit(1 - weight_balance))))
+train.groupBy('label').count().show()
+# stratified sample (train and validation subset)
+fractions = {0.0: 0.25, 1.0: 0.25}
+rnd_seed=42
+train_pipeline_model =pipeline.fit(train)
+assembled_train_df= train_pipeline_model.transform(train)
+assembled_validation_df = assembled_train_df.stat.sampleBy('label', fractions, seed=rnd_seed).cache()
+
+# subtract the validation set from the original training set to get 75% of the entire data
+# and same distribution of income levels
+assembled_train_df = assembled_train_df.subtract(assembled_validation_df).cache()
+assembled_validation_df.groupBy('label').count().show()
+assembled_train_df.groupBy('label').count().show()
+model=lr.fit(assembled_train_df)
+train_preds=model.transform(assembled_validation_df)
+train_summary = model.evaluate(assembled_train_df)
+validation_summary = model.evaluate(assembled_validation_df)
+assembled_test_df= train_pipeline_model.transform(test)
+test_preds = model.transform(assembled_test_df)
+test_summary = model.evaluate(assembled_test_df)
+
+print (train_summary.areaUnderROC)
+print (validation_summary.areaUnderROC)
+print (test_summary.areaUnderROC)
+
+exit(0)
+model = tvs.fit(train) # model is the model with combination of parameters that performed best
+best_model=model.bestModel.stages[-1]
+tvs_train_summary=best_model.summary
+
+train_roc=tvs_train_summary.areaUnderROC
+print train_roc
+best_model.write().overwrite().save('models/logisticregression_best_model')
+predictions =  model.transform(test)
+test_roc= evaluator.evaluate(predictions)
+print test_roc
 
 
-model = tvs.fit(train) # model with tuned parameters
 
-# model.transform(test)\
-#     .select(("features","label","prediction"))\
-#     .show()
+
+#bestModel = PipelineModel.load('models/logisticregression_best_model')
